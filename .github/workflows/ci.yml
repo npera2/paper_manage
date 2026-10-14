@@ -60,13 +60,23 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: 安装 uv（含依赖缓存）
-        uses: astral-sh/setup-uv@v10
+      - name: 安装 uv
+        # ⚠️ 这里必须写**完整版本号**，不能写 @v10。
+        # setup-uv 从 v8 起就不再发布「跟随最新」的大版本标签了
+        # （actions/checkout 那种 @v7 的写法在这里查不到），
+        # 写 @v10 会直接报：unable to find version 'v10'。
+        # 判断依据是 git tag，不是 release 页面上的版本号 —— 两者不是一回事。
+        #
+        # 用完整版本号还有个额外好处：tag 不可变，不用担心有人往
+        # 可移动的大版本标签上推新代码（供应链风险）。
+        uses: astral-sh/setup-uv@v10.3.0
         with:
-          enable-cache: true
-          # 缓存 key 跟着 uv.lock 走：依赖没变就命中缓存，
-          # 变了就自动失效重装。这一条能把 CI 从两三分钟压到几十秒。
-          cache-dependency-glob: uv.lock
+          # 和本地环境、Dockerfile 里的 uv 版本对齐，避免"本地能跑、CI 装不上"。
+          version: "0.12.17"
+          # 缓存不用自己配：enable-cache 默认就是 auto（托管 runner 上自动开），
+          # 缓存 key 默认跟着 pyproject.toml + uv.lock 走。
+          # 显式去写 cache-dependency-glob 反而会把默认值覆盖掉，
+          # 让 pyproject.toml 的改动不再使缓存失效 —— 少写反而更对。
 
       - name: 安装依赖
         # --frozen：严格按 uv.lock 装，绝不偷偷更新 lock 文件。
