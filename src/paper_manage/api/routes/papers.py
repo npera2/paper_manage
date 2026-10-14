@@ -6,16 +6,21 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 
 from paper_manage import crud
-from paper_manage.api.deps import SessionDep
+from paper_manage.api.deps import SessionDep, require_api_key
 from paper_manage.schemas import PaperCreate, PaperPage, PaperRead, PaperUpdate
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
 
-@router.post("", response_model=PaperRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=PaperRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_api_key)],
+)
 def create_paper(payload: PaperCreate, db: SessionDep) -> PaperRead:
     """新建一篇论文。"""
     paper = crud.create_paper(db, payload)
@@ -56,7 +61,11 @@ def read_paper(
     return PaperRead.model_validate(paper)
 
 
-@router.patch("/{paper_id}", response_model=PaperRead)
+@router.patch(
+    "/{paper_id}",
+    response_model=PaperRead,
+    dependencies=[Depends(require_api_key)],
+)
 def update_paper(
     db: SessionDep,
     paper_id: Annotated[int, Path(ge=1, description="论文 id")],
@@ -74,6 +83,7 @@ def update_paper(
     "/{paper_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
+    dependencies=[Depends(require_api_key)],
 )
 def delete_paper(
     db: SessionDep,

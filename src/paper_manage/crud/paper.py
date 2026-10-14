@@ -20,52 +20,42 @@ _PAPER_LOAD_OPTIONS = (
 
 
 def _create_authors(db: Session, items: list[AuthorCreate]) -> list[Author]:
-    """作者：按名字去重，库里已有的直接复用，没有的现场新建。"""
-    seen: set[str] = set()
-    clean: list[AuthorCreate] = []
-    for item in items:
-        name = item.name.strip()
-        if name and name not in seen:
-            seen.add(name)
-            clean.append(item)
+    """作者：库里已有的按名字复用，没有的现场新建。
 
-    if not clean:
+    去重和去空白已经在 schema 层做完了，这里可以无条件信任输入。
+    这是上一阶段做的一道重构：清洗逻辑从 crud 层上移到 schema 边界。
+    """
+    if not items:
         return []
 
-    names = [item.name.strip() for item in clean]
+    names = [item.name for item in items]
     existing = db.scalars(select(Author).where(Author.name.in_(names))).all()
     by_name = {author.name: author for author in existing}
 
     result: list[Author] = []
-    for item in clean:
-        name = item.name.strip()
-        author = by_name.get(name)
+    for item in items:
+        author = by_name.get(item.name)
         if author is None:
-            author = Author(name=name, affiliation=item.affiliation)
+            author = Author(name=item.name, affiliation=item.affiliation)
             db.add(author)
-            by_name[name] = author
+            by_name[item.name] = author
         result.append(author)
     return result
 
 
 def _resolve_tags(db: Session, names: list[str]) -> list[Tag]:
-    """标签：按名字去重，库里已有的直接复用，没有的现场新建。"""
-    seen: set[str] = set()
-    clean: list[str] = []
-    for name in names:
-        stripped = name.strip()
-        if stripped and stripped not in seen:
-            seen.add(stripped)
-            clean.append(stripped)
+    """标签：库里已有的直接复用，没有的现场新建。
 
-    if not clean:
+    同样，名字的去重和清洗已在 schema 层完成。
+    """
+    if not names:
         return []
 
-    existing = db.scalars(select(Tag).where(Tag.name.in_(clean))).all()
+    existing = db.scalars(select(Tag).where(Tag.name.in_(names))).all()
     by_name = {tag.name: tag for tag in existing}
 
     result: list[Tag] = []
-    for name in clean:
+    for name in names:
         tag = by_name.get(name)
         if tag is None:
             tag = Tag(name=name)
