@@ -43,6 +43,32 @@
 - `crud/` 纯数据访问；`services/` 放跨层的业务编排（如 BibTeX 导入流程）。
 - `api/routes/` 只收参数、调下层、定状态码，不写业务逻辑。
 
+## 迁移与部署约定（阶段 6，2026-10-14）
+- Alembic 管理 schema，迁移文件在 `migrations/versions/`。`alembic` 是**生产依赖**
+  （容器启动要跑 `alembic upgrade head`）。
+- ⚠️ **`alembic.ini` 必须纯 ASCII**。Alembic 用 `configparser.read(encoding="locale")` 读它，
+  中文 Windows 的 locale 是 GBK，UTF-8 中文注释会直接
+  `UnicodeDecodeError: 'gbk' codec can't decode byte 0xae`。
+- `migrations/env.py` 注入 URL 时必须判断 `if not config.get_main_option("sqlalchemy.url")`，
+  **不能无条件覆盖**，否则调用方（测试夹具 / CI）传的 URL 会被改回默认库。
+- autogenerate 是拿 metadata 和**真实数据库**做 diff，所以生成初始迁移要在**空库**上跑。
+- **已有数据的库接入 Alembic 要用 `alembic stamp head`**，不能 `upgrade head`（会撞表已存在）。
+- **测试库也用 Alembic 迁移建表**（`tests/conftest.py` 里 `DROP DATABASE ... WITH (FORCE)` +
+  `CREATE DATABASE` + `command.upgrade(cfg, "head")`），不用 `create_all`。
+  理由：create_all 看不到迁移里的额外对象（GIN 索引），会让测试库 schema 与真实部署分叉。
+- PostgreSQL 的**事务性 DDL**：迁移失败会整体回滚，不会留下半截 schema。值得写进 README。
+
+## Docker 约定（阶段 6）
+- `Dockerfile` 多阶段：builder（uv 装依赖）→ runtime（只拷结果）+ 非 root 用户 uid 1000。
+  uv 二进制来自 `COPY --from=ghcr.io/astral-sh/uv:0.12.17`（版本与本地对齐）。
+- CMD 是 `alembic upgrade head && exec uvicorn ...`，**`exec` 不能省**（否则 SIGTERM 传不到 uvicorn）。
+- `.dockerignore` **必须排除 `.env`**（镜像层可被 pull 到的人看到），
+  但**不能**排除 `migrations/` 和 `alembic.ini`。
+- `docker-compose.yml`：db **不映射 5432**（走内部网络，也避开宿主机已有的 `paper-pg`）；
+  `depends_on: condition: service_healthy`；api 用 `environment` 覆盖 `env_file` 的
+  `DATABASE_URL` 为服务名 `db`。
+- 容器里连数据库用**服务名 `db`**，不是 `localhost`。
+
 ## 测试约定（阶段 5，2026-10-14）
 - 状态：**126 个测试、覆盖率 100%**，`uv run pytest` 一键跑。
 - 测试库 `paper_manage_test`，与开发库物理隔离，由 `tests/conftest.py` 自动创建。

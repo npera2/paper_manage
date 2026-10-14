@@ -1,0 +1,46 @@
+# 构建上下文里要排除的东西。
+# 没有它的话，`COPY . .` 会把下面这些全打进镜像（或者更糟 —— 打进构建缓存层）。
+
+# 构建相关的文件本身不需要进镜像。
+# 注意这三行不会影响构建过程：BuildKit 是单独读取 Dockerfile 的，
+# 不从构建上下文里找它，所以排掉它是安全的（也是常见做法）。
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 版本控制与编辑器
+.git
+.gitignore
+
+# 本地虚拟环境和缓存：容器里会重新装，拷进去纯属浪费几百 MB
+.venv
+__pycache__
+*.py[cod]
+.ruff_cache
+.pytest_cache
+.coverage
+htmlcov
+
+# ⚠️ 绝不能进镜像：里面是真实密钥。
+# 镜像的每一层都能被 pull 到的人看到，把 .env 打进去等于公开 API Key。
+# 容器里的配置一律通过环境变量注入（见 docker-compose.yml）。
+.env
+
+# 开发期辅助内容，生产镜像不需要
+tests
+sample_data
+scripts
+
+# 文档与工作区元数据
+#
+# ⚠️ 这里有个容易踩的隐含依赖：pyproject.toml 里写着 readme = "README.md"，
+# 所以 README.md 是**构建项目元数据时必需的输入**。
+# 把 *.md 一刀切排除掉，`uv sync` 会在构建 paper-manage 这一步直接失败：
+#     failed to open file `/app/README.md`: No such file or directory
+# 用 ! 反向包含把它捞回来（.dockerignore 里后匹配的规则胜出）。
+*.md
+!README.md
+.workbuddy
+
+# 注意：不要排除 migrations/ 和 alembic.ini ——
+# 容器启动时要跑 `alembic upgrade head`，少了它们就起不来。

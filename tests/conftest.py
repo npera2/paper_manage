@@ -16,18 +16,23 @@
 
 from collections.abc import Callable, Iterator
 from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session
 
 from paper_manage.core.config import settings
-from paper_manage.db.base import Base
 from paper_manage.db.session import get_db
 from paper_manage.main import app
+
+# 项目根目录，用来定位 alembic.ini 和 migrations/
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # 测试库和开发库**物理隔离**。
 # 绝不能让测试跑在有真实数据的库上 —— 测试会造数据、也会删数据。
@@ -73,23 +78,24 @@ def admin_engine() -> Iterator[Engine]:
 def engine(test_database_url: str, admin_engine: Engine) -> Iterator[Engine]:
     """确保测试库存在，返回连到测试库的引擎，并在库里建好表。"""
     with admin_engine.connect() as conn:
-        exists = conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname = :name"),
-            {"name": TEST_DB_NAME},
-        ).scalar()
-        if not exists:
-            # 库名是我们自己的常量、不是用户输入，所以 f-string 拼接安全。
-            # 注意 CREATE DATABASE 不接受参数化占位符，只能拼字符串。
-            conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
+        # 每次测试会话都整个删库重建。WITH (FORCE) 会顺手踢掉还挂着的旧连接，
+        # 否则 DROP 会因为「有客户端正在使用这个库」而失败。
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}" WITH (FORCE)'))
+        conn.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
+
+    # 用 Alembic 迁移建表，而不是 Base.metadata.create_all()。
+    #
+    # 这个区别很重要：create_all 只按模型定义建表，看不到迁移里额外做的事
+    # （比如那个 pg_trgm 的 GIN 索引）。拿它建测试库，测试库的 schema 就会
+    # 和真实部署悄悄分叉 —— 迁移写错了测试照样全绿，直到线上才发现。
+    # 用同一套迁移建库，测试才是真的在验证「线上会是什么样」。
+    alembic_config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(PROJECT_ROOT / "migrations"))
+    # 同样的 % 转义问题：ConfigParser 会把 % 当插值符号
+    alembic_config.set_main_option("sqlalchemy.url", test_database_url.replace("%", "%%"))
+    command.upgrade(alembic_config, "head")
 
     test_engine = create_engine(test_database_url, pool_pre_ping=True)
-
-    # 只建一次表。注意这里用的是 create_all —— 它完全按模型定义建表，
-    # 所以我们在开发库上手工执行过的 `CREATE INDEX ... USING gin (title gin_trgm_ops)`
-    # 在测试库里是**不存在的**。这种「手写 SQL 和模型定义脱节」的问题，
-    # 正是阶段 6 要引入 Alembic 的原因。
-    Base.metadata.create_all(test_engine)
-
     yield test_engine
     test_engine.dispose()
 

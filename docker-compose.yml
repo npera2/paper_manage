@@ -1,0 +1,61 @@
+# 一条命令起整套服务：
+#     docker compose up --build
+#
+# 两个 service 走 compose 自动创建的内部网络：
+#   api 容器里用**服务名 db** 当主机名连数据库，不是 localhost。
+#   localhost 在容器里指的是"这个容器自己"，那里根本没有 PostgreSQL。
+#   这是从"本机能跑"到"容器里跑不起来"最常见的原因。
+
+services:
+  db:
+    image: postgres:16.2
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: paper_manage
+    volumes:
+      # 具名卷：容器删了数据还在。不挂卷的话每次 up 都是空库，
+      # 迁移会"重新跑一遍"（看不出问题），但你之前导入的数据全没了。
+      - paper-manage-db-data:/var/lib/postgresql/data
+    healthcheck:
+      # 用 pg_isready 而不是"容器进程还在"来判断：
+      # postgres 容器启动后要几秒钟才真正能接受连接。
+      test: ["CMD-SHELL", "pg_isready -U postgres -d paper_manage"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # 有意**不**把 5432 映射到宿主机：
+    #   1. api 通过内部网络直连 db，本来就不需要对外暴露端口；
+    #   2. 顺带避开和宿主机上已有的 PostgreSQL 抢 5432。
+    #   要用 psql 调试时进容器：docker compose exec db psql -U postgres -d paper_manage
+
+  api:
+    build: .
+    depends_on:
+      db:
+        # 注意是 service_healthy 而不是简单的 depends_on: [db]。
+        # 后者只保证"db 容器起来了"，而 api 的启动命令里第一步就是 alembic 迁移 ——
+        # PG 还没 ready 时迁移会直接失败，容器起来就退出，排查起来很懵。
+        condition: service_healthy
+    env_file:
+      - .env # 提供 API_KEY
+    environment:
+      # 覆盖 .env 里的 DATABASE_URL（那里面写的是 127.0.0.1，在容器里连不上）。
+      # environment 的优先级高于 env_file。
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/paper_manage
+    ports:
+      - "8000:8000"
+    healthcheck:
+      # slim 镜像里没有 curl/wget，用 Python 标准库自己发请求。
+      # urlopen 在非 2xx 时会抛异常 → 退出码非 0 → 判定为不健康。
+      test:
+        - CMD-SHELL
+        - "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # start_period：给容器启动留缓冲，这段时间内的失败不计入 retries
+      start_period: 20s
+
+volumes:
+  paper-manage-db-data:
