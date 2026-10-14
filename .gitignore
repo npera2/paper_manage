@@ -1,4 +1,4 @@
-# Python-generated files
+# Python 生成的产物
 __pycache__/
 *.py[oc]
 build/
@@ -6,10 +6,22 @@ dist/
 wheels/
 *.egg-info
 
-# Virtual environments
+# 虚拟环境
 .venv
 
-# 
-.env
-.ruff_cache/
+# 测试与覆盖率产物
+# .coverage 是个 SQLite 数据库，每跑一次测试都会变 —— 跟踪它只会让每次提交多出一堆噪音
+.coverage
+.coverage.*
+htmlcov/
 .pytest_cache/
+
+# 工具缓存
+.ruff_cache/
+
+# 本地环境变量文件：里面是真实密钥，绝不能提交。
+# 注意 .env.example 是**要提交**的 —— 它是给别人的模板，只有占位值。
+.env
+
+# AI 助手的本地工作区（会话笔记等，属于个人上下文，不入库）
+.workbuddy/

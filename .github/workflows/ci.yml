@@ -1,0 +1,102 @@
+# 持续集成：每次 push / PR 都跑一遍完整质量门禁。
+#
+# 这个 workflow 的设计目标不是"跑个测试意思一下"，而是让**任何一类问题都不可能
+# 悄悄进主干**。前面七个阶段踩过的坑，几乎每一个都对应这里的一步：
+#   - 格式/风格漂移            → ruff format --check + ruff check
+#   - 不可见字符/转义残留      → scripts/check_source.py
+#   - 迁移和模型脱节           → alembic check
+#   - 逻辑回归                 → pytest（覆盖率 100% 是硬门槛）
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一个分支连着 push 时，取消上一次还在跑的：省 CI 分钟数，
+# 也避免"旧的那次跑完了、把状态覆盖成旧的"这种混乱。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint · migration · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # GitHub 给的是一台干净的 Ubuntu 机器，上面什么都没有。
+    # services 会在同一个网络里起一个 PostgreSQL 容器，
+    # 从 job 内部用 127.0.0.1:5432 就能连上。
+    #
+    # 为什么不连外部数据库：CI 必须是自己完备的。连外部库意味着
+    # 网络抖动、别人的改动都能让你的构建变红，而且别人 fork 后跑不了。
+    services:
+      postgres:
+        image: postgres:16.2
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: paper_manage
+        ports:
+          - 5432:5432
+        # 等 PG 真正能接受连接再让 job 继续。
+        # 不加这段，下面的 alembic upgrade 会在 PG 还没起来时失败。
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # CI 环境里**没有 .env 文件**（它被 gitignore 了，也不该进仓库）。
+    # 配置全部通过这些环境变量注入 —— 能这么做的前提是 pydantic-settings 的
+    # 取值优先级是「环境变量 > .env 文件」，而且缺失的 env_file 会被安静忽略。
+    # 同一份代码能在本地 / 容器 / CI 三处跑，靠的就是这一条。
+    env:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/paper_manage
+      # 这里不是真密钥，只是为了让 Settings 的必填校验通过
+      API_KEY: ci-only-not-a-real-secret
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 安装 uv（含依赖缓存）
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          # 缓存 key 跟着 uv.lock 走：依赖没变就命中缓存，
+          # 变了就自动失效重装。这一条能把 CI 从两三分钟压到几十秒。
+          cache-dependency-glob: uv.lock
+
+      - name: 安装依赖
+        # --frozen：严格按 uv.lock 装，绝不偷偷更新 lock 文件。
+        # CI 上必须可复现 —— 如果 lock 和 pyproject 不一致，就该直接失败。
+        run: uv sync --frozen
+
+      - name: 格式检查
+        # 注意是 --check：只检查不改。CI 不该修改代码，
+        # 它只负责告诉你有问题（本地跑 ruff format . 修就行）。
+        run: uv run ruff format --check .
+
+      - name: lint
+        run: uv run ruff check .
+
+      - name: 应用数据库迁移
+        # 用迁移建表，而不是 create_all —— 和真实部署保持同一套路径。
+        run: uv run alembic upgrade head
+
+      - name: 模型与迁移是否同步
+        # alembic check 会拿模型 metadata 和真实数据库做 diff，有差异就退出码 1。
+        # 它能挡住两类很容易漏的事故：
+        #   1. 改了模型却忘记生成迁移（到线上才发现字段不存在）
+        #   2. 手写 SQL 加了索引却没声明进模型（下次 autogenerate 会把它删掉）
+        run: uv run alembic check
+
+      - name: 测试（覆盖率 100% 是硬门槛）
+        # --cov-fail-under=100 不放在 pyproject 的 addopts 里，是有意的：
+        # 门槛出现在 CI 配置里，改它就是一次显式决定，不容易被顺手删掉。
+        #
+        # 这一步同时也跑 tests/test_source_hygiene.py —— 检查源码里有没有
+        # 不可见字符和转义残留（这个项目被 `"__&#8203;main__"` 咬过两次：
+        # 语法完全合法、ruff 也不报，唯一的表现是脚本静默什么都不做）。
+        run: uv run pytest --cov-fail-under=100
