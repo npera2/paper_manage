@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -9,6 +9,11 @@ from paper_manage.schemas.tag import TagRead
 # 用户从浏览器地址栏复制的 DOI 常带这些前缀，统一剥掉再存
 DOI_PREFIXES = ("https://doi.org/", "http://doi.org/", "https://dx.doi.org/", "doi:")
 CURRENT_YEAR = datetime.now().year
+
+# 标签名的长度上限，对应 Tag.name 的 String(64)。
+# 不在这一层挡住的话，超长标签会一路走到数据库才报错，
+# 变成 500（服务端错误）而不是干净的 422（客户端错误）。
+TagName = Annotated[str, Field(max_length=64)]
 
 
 def _normalize_doi(value: object) -> object:
@@ -51,7 +56,7 @@ class PaperCreate(BaseModel):
     venue: str | None = Field(default=None, max_length=256)
     doi: str | None = Field(default=None, max_length=128)
     authors: list[AuthorCreate] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
+    tags: list[TagName] = Field(default_factory=list)
 
     @field_validator("doi", mode="before")
     @classmethod
@@ -77,6 +82,24 @@ class PaperCreate(BaseModel):
     def clean_tags(cls, value: list[str]) -> list[str]:
         return _clean_tags(value)
 
+    @field_validator("authors")
+    @classmethod
+    def dedupe_authors(cls, value: list[AuthorCreate]) -> list[AuthorCreate]:
+        """同一位作者在同一篇论文里只保留一次，保留首次出现的顺序。
+
+        这不是"好看"的问题：paper_authors 是 (paper_id, author_id) 复合主键，
+        重复作者会插出重复关联行，直接撞主键约束报 IntegrityError。
+        AuthorCreate 已经用 str_strip_whitespace 去掉了名字两端空白，
+        所以这里可以直接按名字比较。
+        """
+        seen: set[str] = set()
+        result: list[AuthorCreate] = []
+        for item in value:
+            if item.name not in seen:
+                seen.add(item.name)
+                result.append(item)
+        return result
+
 
 class PaperUpdate(BaseModel):
     """PATCH /papers/{id} 的请求体，所有字段可选。
@@ -92,7 +115,7 @@ class PaperUpdate(BaseModel):
     year: int | None = Field(default=None, ge=1000, le=2100)
     venue: str | None = Field(default=None, max_length=256)
     doi: str | None = Field(default=None, max_length=128)
-    tags: list[str] | None = None
+    tags: list[TagName] | None = None
 
     @field_validator("doi", mode="before")
     @classmethod

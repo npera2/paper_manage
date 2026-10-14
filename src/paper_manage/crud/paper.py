@@ -170,9 +170,11 @@ def update_paper(db: Session, paper: Paper, payload: PaperUpdate) -> Paper:
     # 这样 PATCH {"year": 2024} 不会顺手把 title 清成 None。
     data = payload.model_dump(exclude_unset=True)
 
-    # tags 要特殊处理：传进来的是名字列表，得换成 Tag 对象
-    tag_names = data.pop("tags", None)
-    if tag_names is not None:
+    # tags 要特殊处理：传进来的是名字列表，得换成 Tag 对象。
+    # 「没传 tags」和「明确传 tags=null」必须分开：前者不动标签，后者清空标签。
+    # exclude_unset 已经帮我们区分好了，所以判断键在不在、而不是值是不是 None。
+    if "tags" in data:
+        tag_names = data.pop("tags") or []
         paper.tags = _resolve_tags(db, tag_names)
 
     for field, value in data.items():

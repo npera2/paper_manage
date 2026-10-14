@@ -43,8 +43,20 @@
 - `crud/` 纯数据访问；`services/` 放跨层的业务编排（如 BibTeX 导入流程）。
 - `api/routes/` 只收参数、调下层、定状态码，不写业务逻辑。
 
-## BibTeX 导入的约定（阶段 4）
-- 幂等去重：**DOI 优先**；无 DOI 时用 `(title, year)` 兜底指纹。
+## 测试约定（阶段 5，2026-10-14）
+- 状态：**126 个测试、覆盖率 100%**，`uv run pytest` 一键跑。
+- 测试库 `paper_manage_test`，与开发库物理隔离，由 `tests/conftest.py` 自动创建。
+- **隔离机制**：`connection.begin()` 外层事务 + `Session(bind=connection,
+  join_transaction_mode="create_savepoint")`，测试结束 `rollback()` 一锅端。
+  这是 SQLAlchemy 2.0 的正统写法，别再抄老的 `after_transaction_end` 事件方案。
+- `client` fixture 用 `dependency_overrides[get_db]` 指向**同一个 db_session**。
+  新建 session 是最常见的坑（数据跑到另一条连接上，回滚不掉）。
+- ⚠️ `make_url()` 的结果必须 `render_as_string(hide_password=False)` 再转字符串，
+  否则密码变成 `***`。
+- `scripts/check_source.py`（源码卫生扫描）已同步为 `tests/test_source_hygiene.py`，
+  阶段 7 会随 pytest 一起进 CI。
+
+## BibTeX 导入的约定（阶段 4）- 幂等去重：**DOI 优先**；无 DOI 时用 `(title, year)` 兜底指纹。
   去重要同时比对「库里已有的」+「同一文件里已出现过的」。
 - 语义是**部分成功**：返回 200 + `ImportStats`，不变式
   `total == created + skipped + failed`，失败明细在 `issues`。

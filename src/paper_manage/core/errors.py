@@ -15,6 +15,7 @@ FastAPI 默认的错误体是 {"detail": ...}，而且不同来源的形状不�
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -41,7 +42,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
 
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            # 用 HTTP_422_UNPROCESSABLE_CONTENT 而不是老的 ..._ENTITY：
+            # RFC 9110 把这个状态码的措辞从 "Unprocessable Entity" 改成了
+            # "Unprocessable Content"，新版本的 Starlette 会为老名字发弃用警告。
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={
                 "error": {
                     "code": "validation_error",
@@ -64,4 +68,25 @@ def register_exception_handlers(app: FastAPI) -> None:
                 }
             },
             headers=exc.headers,
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        """数据库约束冲突 → 409，而不是 500。
+
+        典型场景：POST 一篇 DOI 已经存在的论文。
+        不处理的话 SQLAlchemy 的 IntegrityError 会一路冒到顶层变成 500，
+        而 500 的语义是「服务端出错了」—— 可这明明是调用方传了重复数据，
+        属于「客户端错误」，应该是 4xx。
+
+        这是写接口时很容易漏的一类映射：把「数据库层异常」翻译成「HTTP 语义」。
+        """
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "conflict",
+                    "message": "数据冲突：唯一约束或外键约束不满足",
+                }
+            },
         )
