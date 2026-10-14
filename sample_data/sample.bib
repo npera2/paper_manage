@@ -1,0 +1,62 @@
+% 样例 .bib，专门混了几种情况来试导入。
+% 最后两条是故意写坏的，用来演示「部分失败」。
+%
+% 试法：
+%   curl -X POST http://127.0.0.1:8000/papers/import \
+%        -H "Content-Type: application/json" -H "X-API-Key: <你的 key>" \
+%        --data-binary @<(python -c "import json,sys;print(json.dumps({'bibtex':open('sample_data/sample.bib',encoding='utf-8').read()}))")
+%   或者直接上传文件：
+%   curl -X POST http://127.0.0.1:8000/papers/import/upload \
+%        -H "X-API-Key: <你的 key>" -F "file=@sample_data/sample.bib"
+
+@string{joG = "Journal of Glaciology"}
+
+@article{paxman2023,
+  title = {Automatic mapping of {Greenland}'s subglacial valleys},
+  author = {Paxman, Guy J. G. and Zhang, Alice and Smith, John},
+  journal = {Journal of Glaciology},
+  year = {2023},
+  doi = {https://doi.org/10.1017/JOG.2023.1},
+  keywords = {glaciology, subglacial, remote-sensing},
+  abstract = {We present an automatic method for mapping subglacial valleys
+              using radio-echo sounding data.}
+}
+
+@inproceedings{chartrand2026,
+  title = {A giant subglacial valley network},
+  author = {Chartrand, Robert and Li, Bob},
+  booktitle = {Proceedings of the Cryosphere Conference},
+  year = {2026},
+  keywords = {glaciology; valley}
+}
+
+@article{zimmer2018,
+  title = {Bedrock valley modification by glaciers},
+  author = {Zimmer, Anna},
+  journal = {The Cryosphere},
+  year = {2018}
+}
+
+@misc{carter2024,
+  title = {Ancient landforms beneath the {Evans-Rutford} region},
+  author = {Carter, Sam},
+  year = {2024},
+  keywords = {antarctica}
+}
+
+@misc{noTitleEntry,
+  note = {这条没有 title，会拿引用键 noTitleEntry 兜底},
+  year = {2020}
+}
+
+@article{yearOutOfRange,
+  title = {A paper from the far future},
+  author = {Time Traveller},
+  journal = {Tomorrow},
+  year = {2099}
+}
+
+@article{missingEquals,
+  title {这里少了一个等号},
+  year = {2019}
+}

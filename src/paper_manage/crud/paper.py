@@ -4,10 +4,10 @@
 好处：将来写测试可以直接调这些函数，不用起 HTTP 服务。
 """
 
-from sqlalchemy import func, nulls_last, or_, select
+from sqlalchemy import func, insert, nulls_last, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from paper_manage.models import Author, Paper, Tag
+from paper_manage.models import Author, Paper, Tag, paper_authors
 from paper_manage.schemas import AuthorCreate, PaperCreate, PaperUpdate
 
 # 统一的加载选项，防止 N+1。
@@ -65,6 +65,31 @@ def _resolve_tags(db: Session, names: list[str]) -> list[Tag]:
     return result
 
 
+def _link_authors(db: Session, paper: Paper, authors: list[Author]) -> None:
+    """给论文挂作者，并把署名顺序写进关联表。
+
+    为什么不用 `paper.authors = authors`：
+    relationship 自动插关联行时只填两个外键，author_order 只能拿到
+    数据库的默认值 0。而署名顺序（一作 / 通讯）在学术里是有意义的，
+    所以这里手工插关联表，把顺序一起写进去。
+
+    这是 ORM 抽象「不够用」时该有的判断：能用高层 API 就用；一旦需要
+    控制中间表的额外列，退回手写语句是正常做法，不是 hack。
+    """
+    if not authors:
+        return
+
+    # 新论文和新作者此刻还只是内存对象，要先 flush 拿到主键才能建关联
+    db.flush()
+    db.execute(
+        insert(paper_authors),
+        [
+            {"paper_id": paper.id, "author_id": author.id, "author_order": order}
+            for order, author in enumerate(authors)
+        ],
+    )
+
+
 def create_paper(db: Session, payload: PaperCreate) -> Paper:
     """新建一篇论文，并处理作者/标签关联。"""
     paper = Paper(
@@ -74,12 +99,16 @@ def create_paper(db: Session, payload: PaperCreate) -> Paper:
         venue=payload.venue,
         doi=payload.doi,
     )
-    # 直接给关系赋值：SQLAlchemy 会自动往关联表插行，
-    # 也会级联把新建的 Author / Tag 一起存进去（不用手动 add 它们）。
-    paper.authors = _create_authors(db, payload.authors)
-    paper.tags = _resolve_tags(db, payload.tags)
-
     db.add(paper)
+
+    authors = _create_authors(db, payload.authors)
+    tags = _resolve_tags(db, payload.tags)
+
+    # 作者必须走手工插关联表（要写 author_order）；
+    # 标签的关联表没有额外列，用 relationship 最省事，两种做法各有适用场景。
+    _link_authors(db, paper, authors)
+    paper.tags = tags
+
     db.commit()
     # expire_on_commit=False，所以 commit 后这些属性还在，不需要 refresh
     return paper

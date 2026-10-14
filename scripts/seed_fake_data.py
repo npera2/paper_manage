@@ -76,5 +76,5 @@ def main() -> None:
         print(f"论文-作者关联：新增 {len(links)} 条")
 
 
-if __name__ == "__&#8203;main__":
+if __name__ == "__main__":
     main()
