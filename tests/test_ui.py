@@ -32,15 +32,15 @@ class TestConsoleBackendContract:
         这类问题很阴险：页面加载完全正常、控制台也不报错，
         但一点按钮就 404 —— 而且错误在浏览器里，后端日志干干净净。
 
-        做法：把 HTML 里出现的所有 /papers... 字面量抠出来，
+        做法：把 HTML 里出现的所有接口路径字面量抠出来，
         逐个和 OpenAPI 里注册的路径比对。
         """
         html = client.get("/ui/").text
         registered = set(client.get("/openapi.json").json()["paths"])
 
-        # 匹配静态写的路径字面量。"忽略拼接出来的（"/papers/" + id），
+        # 匹配静态写的路径字面量。忽略拼接出来的（"/papers/" + id），
         # 所以 strip 掉末尾斜杠再比。
-        referenced = {ref.rstrip("/") for ref in re.findall(r'"(/papers[a-z/]*)"', html)}
+        referenced = {ref.rstrip("/") for ref in re.findall(r'"(/(?:papers|auth)[a-z/]*)"', html)}
 
         assert referenced, "没在页面里找到任何接口路径，说明正则或页面结构变了"
         for ref in sorted(referenced):

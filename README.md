@@ -123,6 +123,7 @@ erDiagram
 | 方法 | 路径 | 鉴权 | 说明 |
 |---|---|---|---|
 | `GET` | `/health` | — | 健康检查 |
+| `GET` | `/auth/check` | 需要 | 校验 API Key 是否有效，**无副作用** |
 | `GET` | `/papers` | — | 组合检索 + 分页，返回 `{total, limit, offset, items}` |
 | `GET` | `/papers/{id}` | — | 按 id 取单篇 |
 | `POST` | `/papers` | 需要 | 新建论文 |

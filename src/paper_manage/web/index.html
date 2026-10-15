@@ -272,12 +272,25 @@
     banner("ok", "API Key 已保存到本地浏览器（localStorage），下次打开自动带上。");
   };
   $("test-conn").onclick = function () {
-    // 用「检索一条」而不是 /health 来测：/health 不碰数据库，
-    // 返回 200 不代表数据库通了。
+    // 这里必须分成两步验，因为它们是两件独立的事：
+    //   1. 连通性 —— 用读接口测（顺便确认数据库通不通，/health 是不碰数据库的）
+    //   2. 凭据有效性 —— 只能用「需要鉴权」的接口测
+    //
+    // 只做第一步的话，随便填个 key 都会显示"连接正常" —— 因为读接口按设计就是公开的，
+    // 它连看都不看你的 API Key。
     api("/papers?limit=1").then(function (data) {
-      banner("ok", "连接正常。库里共 " + data.total + " 篇论文。");
+      api("/auth/check").then(function () {
+        banner("ok", "服务与数据库正常（库里 " + data.total + " 篇论文），API Key 有效。");
+      }).catch(function (err) {
+        if (err.status === 401) {
+          banner("err", "服务与数据库正常（库里 " + data.total + " 篇论文），但 API Key " +
+            "无效或未填 —— 检索能用，新建/编辑/删除/导入会 401。");
+        } else {
+          banner("err", "校验 API Key 时出错：" + err.message);
+        }
+      });
     }).catch(function (err) {
-      banner("err", "连接失败：" + err.message);
+      banner("err", "连不上服务：" + err.message);
     });
   };
 

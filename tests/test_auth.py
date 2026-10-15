@@ -96,3 +96,50 @@ class TestDependencyOverride:
             # 这里只弹出我们自己加的这一条（client fixture 里还有 get_db 的覆盖，
             # 用 clear() 会把它一起清掉）。
             app.dependency_overrides.pop(require_api_key, None)
+
+
+class TestCredentialCheckEndpoint:
+    """/auth/check —— 唯一能用来验证凭据的接口。
+
+    它存在的直接原因是一个真实 bug：控制台的「测试连接」原本调的是 GET /papers，
+    而读接口按设计是公开的 —— 于是**随便填什么 key 都显示"连接正常"**，
+    用户根本无从知道自己填的 key 对不对。
+    """
+
+    def test_rejects_missing_key(self, client: TestClient) -> None:
+        assert client.get("/auth/check").status_code == 401
+
+    def test_rejects_wrong_key(self, client: TestClient) -> None:
+        response = client.get("/auth/check", headers={"X-API-Key": "definitely-wrong"})
+        assert response.status_code == 401
+
+    def test_accepts_correct_key(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        response = client.get("/auth/check", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+
+    def test_has_no_side_effects(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        """「只验凭据」的接口不该改动任何数据 —— 否则客户端就不敢随便调它。"""
+        before = client.get("/papers").json()["total"]
+        client.get("/auth/check", headers=auth_headers)
+        assert client.get("/papers").json()["total"] == before
+
+
+class TestReadEndpointsDoNotValidateCredentials:
+    """回归测试：这就是控制台最初判断错的根源。
+
+    读接口是公开的，拿错误的 key 也能读。所以**没有任何读接口**能用来验证凭据，
+    客户端必须调 /auth/check。这条设计如果哪天被改成「读也要鉴权」，
+    下面这几个测试会红 —— 那时记得同步改控制台的逻辑。
+    """
+
+    def test_list_accepts_any_key(self, client: TestClient) -> None:
+        assert client.get("/papers", headers={"X-API-Key": "definitely-wrong"}).status_code == 200
+
+    def test_list_accepts_no_key_at_all(self, client: TestClient) -> None:
+        assert client.get("/papers").status_code == 200
+
+    def test_detail_accepts_any_key(self, client: TestClient, create_paper: Any) -> None:
+        paper = create_paper()
+        headers = {"X-API-Key": "definitely-wrong"}
+        assert client.get(f"/papers/{paper['id']}", headers=headers).status_code == 200

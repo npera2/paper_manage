@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from paper_manage.api.routes import imports, papers
+from paper_manage.api.routes import auth, imports, papers
 from paper_manage.core.errors import register_exception_handlers
 
 app = FastAPI(title="Paper Manage API", version="0.1.0")
@@ -13,6 +13,7 @@ app = FastAPI(title="Paper Manage API", version="0.1.0")
 # papers 里有 /papers/{paper_id} 这种通配路径，如果它先注册，
 # 请求 /papers/import 会被它抢走、把 "import" 当 paper_id 解析 → 422。
 # 规则：更具体的路径必须排在通配路径前面。
+app.include_router(auth.router)
 app.include_router(imports.router)
 app.include_router(papers.router)
 

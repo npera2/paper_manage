@@ -1125,24 +1125,24 @@ _PAPER_LOAD_OPTIONS = (
 
 ## 附录 A：技术选型决策表
 
-| 决策点 | 选了 | 没选 | 理由 |
-|---|---|---|---|
-| Web 框架 | FastAPI | Flask / Django | 原生吃 Pydantic 和 DI，两条核心需求被框架直接接住 |
-| 数据库访问 | **同步** SQLAlchemy 2.0 | async SQLAlchemy | 同步栈概念少、报错直观、断点好打；代价是不能在 `async def` 里用，需要配套纪律 |
-| 驱动 | `psycopg[binary]` | psycopg2 / asyncpg | psycopg3 是 psycopg2 的官方继任者；`binary` extra 自带 libpq |
-| 数据库 | PostgreSQL | MySQL / SQLite | 事务性 DDL（迁移失败能回滚）、GIN 索引、contrib 扩展 |
-| 配置 | pydantic-settings | 手写 `os.environ` | 环境变量 > `.env` 的优先级天然支持三处通用；有类型校验 |
-| Schema 管理 | Alembic | `create_all` | `create_all` 只建不存在的表，绝不改已存在的表结构；迁移有版本、能 diff、能回滚 |
-| 作者/标签建模 | 独立表 + 关联表 | JSON 列 / 字符串数组 | 「按作者/标签检索」必须能走索引，`LIKE '%name%'` 是全表扫描加误匹配 |
-| BibTeX 解析 | 自研 | `bibtexparser` | 只需取条目和字段值；自己写才能把「部分失败」设计清楚 |
-| 测试隔离 | 外层事务 + SAVEPOINT | 每个测试重建 schema | 快一到两个数量级 |
-| 测试库建表 | Alembic 迁移 | `create_all` | 用 `create_all` 会让测试库 schema 和真实部署悄悄分叉 |
-| lint + format | ruff | flake8 + black + isort | 一个工具、快一两个数量级、配置只有一处 |
-| 包管理 | uv | pip + poetry | 快得多，lock 文件严格可复现，容器里 `--frozen` 干净利落 |
-| 容器基础镜像 | `python:3.12-slim` | `alpine` / `full` | alpine 的 musl libc 会让预编译 wheel 用不了；full 体积大几百 MB |
-| db 端口 | **不映射** | 映射到宿主机 | api 走内部网络就够了；最小暴露面 |
-| 鉴权 | `Depends` + `X-API-Key` | 中间件 / JWT | 依赖可被 OpenAPI 描述、可被测试替换；JWT 对单用户项目是过度设计 |
-| 错误格式 | 统一 `{"error": {...}}` | 默认 `{"detail": ...}` | 前端不用为「校验失败」和「HTTP 异常」写两套解析 |
+| 决策点           | 选了                      | 没选                     | 理由                                                 |
+| ------------- | ----------------------- | ---------------------- | -------------------------------------------------- |
+| Web 框架        | FastAPI                 | Flask / Django         | 原生吃 Pydantic 和 DI，两条核心需求被框架直接接住                    |
+| 数据库访问         | **同步** SQLAlchemy 2.0   | async SQLAlchemy       | 同步栈概念少、报错直观、断点好打；代价是不能在 `async def` 里用，需要配套纪律      |
+| 驱动            | `psycopg[binary]`       | psycopg2 / asyncpg     | psycopg3 是 psycopg2 的官方继任者；`binary` extra 自带 libpq |
+| 数据库           | PostgreSQL              | MySQL / SQLite         | 事务性 DDL（迁移失败能回滚）、GIN 索引、contrib 扩展                 |
+| 配置            | pydantic-settings       | 手写 `os.environ`        | 环境变量 > `.env` 的优先级天然支持三处通用；有类型校验                   |
+| Schema 管理     | Alembic                 | `create_all`           | `create_all` 只建不存在的表，绝不改已存在的表结构；迁移有版本、能 diff、能回滚   |
+| 作者/标签建模       | 独立表 + 关联表               | JSON 列 / 字符串数组         | 「按作者/标签检索」必须能走索引，`LIKE '%name%'` 是全表扫描加误匹配         |
+| BibTeX 解析     | 自研                      | `bibtexparser`         | 只需取条目和字段值；自己写才能把「部分失败」设计清楚                         |
+| 测试隔离          | 外层事务 + SAVEPOINT        | 每个测试重建 schema          | 快一到两个数量级                                           |
+| 测试库建表         | Alembic 迁移              | `create_all`           | 用 `create_all` 会让测试库 schema 和真实部署悄悄分叉              |
+| lint + format | ruff                    | flake8 + black + isort | 一个工具、快一两个数量级、配置只有一处                                |
+| 包管理           | uv                      | pip + poetry           | 快得多，lock 文件严格可复现，容器里 `--frozen` 干净利落               |
+| 容器基础镜像        | `python:3.12-slim`      | `alpine` / `full`      | alpine 的 musl libc 会让预编译 wheel 用不了；full 体积大几百 MB   |
+| db 端口         | **不映射**                 | 映射到宿主机                 | api 走内部网络就够了；最小暴露面                                 |
+| 鉴权            | `Depends` + `X-API-Key` | 中间件 / JWT              | 依赖可被 OpenAPI 描述、可被测试替换；JWT 对单用户项目是过度设计             |
+| 错误格式          | 统一 `{"error": {...}}`   | 默认 `{"detail": ...}`   | 前端不用为「校验失败」和「HTTP 异常」写两套解析                         |
 
 ---
 
