@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Manage · 控制台</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --border: #e3e8ef;
+    --text: #1f2937;
+    --muted: #64748b;
+    --hint: #94a3b8;
+    --accent: #185fa5;
+    --accent-soft: #e6f1fb;
+    --danger: #a32d2d;
+    --danger-soft: #fcebeb;
+    --ok: #0f6e56;
+    --ok-soft: #e1f5ee;
+    --warn: #854f0b;
+    --warn-soft: #faeeda;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  header {
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; font-weight: 500; margin: 0; }
+  header h1 span { color: var(--hint); font-weight: 400; font-size: 13px; margin-left: 6px; }
+  .spacer { flex: 1; }
+  .key-box { display: flex; align-items: center; gap: 8px; }
+  .key-box label { font-size: 13px; color: var(--muted); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 24px 60px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 14px; font-weight: 500; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; }
+  .card h2 .count { font-weight: 400; color: var(--muted); font-size: 13px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  label.field { display: block; }
+  label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select, textarea, button {
+    font: inherit; color: inherit; border-radius: 8px; border: 1px solid var(--border);
+    padding: 7px 10px; background: #fff; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  button { cursor: pointer; width: auto; background: #fff; transition: background .12s; }
+  button:hover { background: #f8fafc; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #13507f; }
+  button.danger { color: var(--danger); border-color: #f0c9c9; }
+  button.danger:hover { background: var(--danger-soft); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+
+  .paper { border-top: 1px solid var(--border); padding: 14px 0; }
+  .paper:first-child { border-top: none; }
+  .paper-title { font-weight: 500; margin: 0 0 6px; }
+  .meta { font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; }
+  .meta b { font-weight: 400; color: var(--hint); }
+  .chip {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    border-radius: 999px; padding: 1px 9px; font-size: 12px; margin-right: 4px;
+  }
+  .chip.tag { background: var(--ok-soft); color: var(--ok); }
+  .paper-actions { display: flex; gap: 6px; }
+  .paper-head { display: flex; gap: 12px; align-items: flex-start; }
+  .paper-head .paper-title { flex: 1; }
+
+  .empty { color: var(--hint); text-align: center; padding: 28px 0; font-size: 13px; }
+
+  .modal {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
+    display: none; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; z-index: 50;
+  }
+  .modal.open { display: flex; }
+  .modal-panel {
+    background: var(--card); border-radius: var(--radius); width: 100%; max-width: 620px;
+    padding: 22px 24px; box-shadow: 0 12px 40px rgba(15, 23, 42, .18);
+  }
+  .modal-panel h3 { font-size: 15px; font-weight: 500; margin: 0 0 18px; }
+
+  .author-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; }
+
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 8px 14px; min-width: 84px; }
+  .stat b { display: block; font-size: 20px; font-weight: 500; line-height: 1.3; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .issues { max-height: 200px; overflow: auto; background: var(--warn-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .issues div { margin-bottom: 4px; }
+  .issues code { color: var(--warn); font-weight: 500; }
+
+  #banner { display: none; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+  #banner.show { display: block; }
+  #banner.err { background: var(--danger-soft); color: var(--danger); }
+  #banner.ok { background: var(--ok-soft); color: var(--ok); }
+  #banner.info { background: var(--accent-soft); color: var(--accent); }
+  .hint { font-size: 12px; color: var(--hint); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Paper Manage<span>控制台</span></h1>
+  <div class="spacer"></div>
+  <div class="key-box">
+    <label for="api-key">API Key</label>
+    <input id="api-key" type="password" placeholder="写操作需要" style="width:220px">
+    <button id="save-key" class="small">保存</button>
+    <button id="test-conn" class="small">测试连接</button>
+  </div>
+</header>
+
+<main>
+  <div id="banner"></div>
+
+  <!-- 检索 -->
+  <section class="card">
+    <h2>检索<span class="hint">四个条件可任意组合，留空表示不限</span></h2>
+    <div class="grid">
+      <label class="field"><span>作者（模糊）</span><input id="f-author" placeholder="zhang"></label>
+      <label class="field"><span>年份（精确）</span><input id="f-year" type="number" placeholder="2024"></label>
+      <label class="field"><span>标签（精确）</span><input id="f-tag" placeholder="glaciology"></label>
+      <label class="field"><span>关键词（标题+摘要）</span><input id="f-q" placeholder="valley"></label>
+      <label class="field"><span>每页条数</span>
+        <select id="f-limit">
+          <option>10</option><option selected>20</option><option>50</option><option>100</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <button class="primary" id="btn-search">检索</button>
+      <button id="btn-reset">重置</button>
+      <button id="btn-new">＋ 新建论文</button>
+      <button id="btn-import">导入 BibTeX</button>
+    </div>
+  </section>
+
+  <!-- 结果 -->
+  <section class="card">
+    <h2>结果<span class="count" id="result-count"></span></h2>
+    <div id="results"><div class="empty">还没有检索。点上面的「检索」加载数据。</div></div>
+    <div class="row" id="pager" style="display:none">
+      <button id="btn-prev">← 上一页</button>
+      <span class="hint" id="page-info"></span>
+      <button id="btn-next">下一页 →</button>
+    </div>
+  </section>
+</main>
+
+<!-- 新建 / 编辑 -->
+<div class="modal" id="editor-modal">
+  <div class="modal-panel">
+    <h3 id="editor-title">新建论文</h3>
+    <div class="grid">
+      <label class="field" style="grid-column:1/-1"><span>标题 *</span><input id="e-title"></label>
+      <label class="field"><span>年份</span><input id="e-year" type="number" placeholder="2024"></label>
+      <label class="field"><span>发表处</span><input id="e-venue" placeholder="The Cryosphere"></label>
+      <label class="field" style="grid-column:1/-1"><span>DOI（可带 https://doi.org/ 前缀，会自动归一化）</span><input id="e-doi"></label>
+      <label class="field" style="grid-column:1/-1"><span>摘要</span><textarea id="e-abstract"></textarea></label>
+    </div>
+    <div style="margin-top:16px">
+      <span class="hint">作者（顺序即署名顺序）</span>
+      <div id="author-list" style="margin-top:8px"></div>
+      <button class="small" id="btn-add-author">＋ 添加作者</button>
+    </div>
+    <label class="field" style="margin-top:16px"><span>标签（逗号分隔）</span><input id="e-tags" placeholder="glaciology, radar"></label>
+    <div class="row" style="justify-content:flex-end">
+      <button id="btn-cancel-edit">取消</button>
+      <button class="primary" id="btn-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导入 -->
+<div class="modal" id="import-modal">
+  <div class="modal-panel">
+    <h3>导入 BibTeX</h3>
+    <label class="field"><span>选择 .bib 文件</span><input id="i-file" type="file" accept=".bib,.txt"></label>
+    <label class="field" style="margin-top:12px"><span>或者直接粘贴 BibTeX 文本</span>
+      <textarea id="i-text" style="min-height:160px" placeholder="@article{key,&#10;  title = {…},&#10;  year = {2024}&#10;}"></textarea>
+    </label>
+    <div class="row" style="justify-content:flex-end">
+      <button id="btn-cancel-import">取消</button>
+      <button class="primary" id="btn-do-import">导入</button>
+    </div>
+    <div id="import-result"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- 基础设施 ----------
+  var state = { offset: 0, limit: 20, total: 0, editingId: null };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // 渲染用户数据时必须转义：论文标题里完全可能有 < > & 这些字符
+  function esc(value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+    });
+  }
+
+  function banner(kind, message) {
+    var el = $("banner");
+    el.className = "show " + kind;
+    el.textContent = message;
+    if (kind === "ok" || kind === "info") {
+      clearTimeout(el._timer);
+      el._timer = setTimeout(function () { el.className = ""; }, 4000);
+    }
+  }
+
+  function getKey() { return $("api-key").value.trim(); }
+
+  // 所有请求都走这一个函数：统一带上 API Key、统一解析统一格式的错误体
+  function api(path, options) {
+    options = options || {};
+    var headers = options.headers || {};
+    var key = getKey();
+    if (key && !options.noAuth) headers["X-API-Key"] = key;
+    if (options.json !== undefined) {
+      headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(options.json);
+    }
+    return fetch(path, { method: options.method || "GET", headers: headers, body: options.body })
+      .then(function (res) {
+        if (res.status === 204) return null;
+        return res.text().then(function (text) {
+          var data = null;
+          try { data = text ? JSON.parse(text) : null; } catch (e) { /* 非 JSON 响应 */ }
+          if (!res.ok) {
+            // 后端把所有错误统一成了 {error: {code, message, details}}
+            var msg = "HTTP " + res.status;
+            if (data && data.error) {
+              msg = data.error.message || msg;
+              if (data.error.details && data.error.details.length) {
+                msg += "（" + data.error.details.map(function (d) {
+                  return (d.field ? d.field + ": " : "") + d.message;
+                }).join("; ") + "）";
+              }
+            }
+            var err = new Error(msg);
+            err.status = res.status;
+            throw err;
+          }
+          return data;
+        });
+      });
+  }
+
+  // ---------- API Key ----------
+  $("api-key").value = localStorage.getItem("pm_api_key") || "";
+  $("save-key").onclick = function () {
+    localStorage.setItem("pm_api_key", getKey());
+    banner("ok", "API Key 已保存到本地浏览器（localStorage），下次打开自动带上。");
+  };
+  $("test-conn").onclick = function () {
+    // 用「检索一条」而不是 /health 来测：/health 不碰数据库，
+    // 返回 200 不代表数据库通了。
+    api("/papers?limit=1").then(function (data) {
+      banner("ok", "连接正常。库里共 " + data.total + " 篇论文。");
+    }).catch(function (err) {
+      banner("err", "连接失败：" + err.message);
+    });
+  };
+
+  // ---------- 检索 ----------
+  function currentQuery() {
+    var params = new URLSearchParams();
+    var author = $("f-author").value.trim();
+    var year = $("f-year").value.trim();
+    var tag = $("f-tag").value.trim();
+    var q = $("f-q").value.trim();
+    if (author) params.set("author", author);
+    if (year) params.set("year", year);
+    if (tag) params.set("tag", tag);
+    if (q) params.set("q", q);
+    params.set("limit", $("f-limit").value);
+    params.set("offset", String(state.offset));
+    return params.toString();
+  }
+
+  function renderPapers(data) {
+    state.total = data.total;
+    state.limit = data.limit;
+    $("result-count").textContent = "共 " + data.total + " 条";
+    $("pager").style.display = data.total > data.limit ? "flex" : "none";
+    var pageCount = Math.max(1, Math.ceil(data.total / data.limit));
+    var current = Math.floor(data.offset / data.limit) + 1;
+    $("page-info").textContent = "第 " + current + " / " + pageCount + " 页";
+    $("btn-prev").disabled = data.offset <= 0;
+    $("btn-next").disabled = data.offset + data.limit >= data.total;
+
+    if (!data.items.length) {
+      $("results").innerHTML = '<div class="empty">没有匹配的论文。</div>';
+      return;
+    }
+    $("results").innerHTML = data.items.map(function (p) {
+      var authors = p.authors.map(function (a) {
+        return '<span class="chip">' + esc(a.name) + "</span>";
+      }).join("");
+      var tags = p.tags.map(function (t) {
+        return '<span class="chip tag">' + esc(t.name) + "</span>";
+      }).join("");
+      return '<article class="paper">' +
+        '<div class="paper-head">' +
+          '<p class="paper-title">' + esc(p.title) + "</p>" +
+          '<div class="paper-actions">' +
+            '<button class="small" data-edit="' + p.id + '">编辑</button>' +
+            '<button class="small danger" data-del="' + p.id + '">删除</button>' +
+          "</div>" +
+        "</div>" +
+        '<div class="meta">' +
+          "<span><b>ID</b> " + p.id + "</span>" +
+          "<span><b>年份</b> " + (p.year === null ? "—" : p.year) + "</span>" +
+          "<span><b>发表处</b> " + (p.venue ? esc(p.venue) : "—") + "</span>" +
+          "<span><b>DOI</b> " + (p.doi ? esc(p.doi) : "—") + "</span>" +
+        "</div>" +
+        '<div class="meta" style="margin-top:6px"><span><b>作者</b> ' + (authors || "—") + "</span></div>" +
+        '<div class="meta" style="margin-top:4px"><span><b>标签</b> ' + (tags || "—") + "</span></div>" +
+        "</article>";
+    }).join("");
+  }
+
+  function search() {
+    api("/papers?" + currentQuery())
+      .then(function (data) { renderPapers(data); })
+      .catch(function (err) { banner("err", "检索失败：" + err.message); });
+  }
+
+  $("btn-search").onclick = function () { state.offset = 0; search(); };
+  $("btn-reset").onclick = function () {
+    ["f-author", "f-year", "f-tag", "f-q"].forEach(function (id) { $(id).value = ""; });
+    $("f-limit").value = "20";
+    state.offset = 0;
+    search();
+  };
+  $("btn-prev").onclick = function () { state.offset = Math.max(0, state.offset - state.limit); search(); };
+  $("btn-next").onclick = function () { state.offset += state.limit; search(); };
+
+  // ---------- 新建 / 编辑 ----------
+  function addAuthorRow(name, affiliation) {
+    var row = document.createElement("div");
+    row.className = "author-row";
+    row.innerHTML =
+      '<input class="a-name" placeholder="姓名" value="' + esc(name || "") + '">' +
+      '<input class="a-aff" placeholder="单位（可空）" value="' + esc(affiliation || "") + '">' +
+      '<button class="small danger" type="button">删除</button>';
+    row.querySelector("button").onclick = function () { row.remove(); };
+    $("author-list").appendChild(row);
+  }
+  $("btn-add-author").onclick = function () { addAuthorRow("", ""); };
+
+  function openEditor(paper) {
+    state.editingId = paper ? paper.id : null;
+    $("editor-title").textContent = paper ? "编辑论文 #" + paper.id : "新建论文";
+    $("e-title").value = paper ? paper.title : "";
+    $("e-year").value = paper && paper.year !== null ? paper.year : "";
+    $("e-venue").value = paper && paper.venue ? paper.venue : "";
+    $("e-doi").value = paper && paper.doi ? paper.doi : "";
+    $("e-abstract").value = paper && paper.abstract ? paper.abstract : "";
+    $("e-tags").value = paper ? paper.tags.map(function (t) { return t.name; }).join(", ") : "";
+    $("author-list").innerHTML = "";
+    if (paper && paper.authors.length) {
+      paper.authors.forEach(function (a) { addAuthorRow(a.name, a.affiliation); });
+    } else {
+      addAuthorRow("", "");
+    }
+    $("editor-modal").classList.add("open");
+  }
+  function closeEditor() { $("editor-modal").classList.remove("open"); }
+
+  $("btn-new").onclick = function () { openEditor(null); };
+  $("btn-cancel-edit").onclick = closeEditor;
+  $("editor-modal").onclick = function (e) { if (e.target === $("editor-modal")) closeEditor(); };
+
+  $("btn-save").onclick = function () {
+    var title = $("e-title").value.trim();
+    if (!title) { banner("err", "标题不能为空。"); return; }
+
+    var authors = [];
+    Array.prototype.forEach.call(document.querySelectorAll("#author-list .author-row"), function (row) {
+      var name = row.querySelector(".a-name").value.trim();
+      if (name) {
+        var aff = row.querySelector(".a-aff").value.trim();
+        authors.push(aff ? { name: name, affiliation: aff } : { name: name });
+      }
+    });
+    var year = $("e-year").value.trim();
+    var tags = $("e-tags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+
+    var common = {
+      title: title,
+      abstract: $("e-abstract").value.trim() || null,
+      year: year ? Number(year) : null,
+      venue: $("e-venue").value.trim() || null,
+      doi: $("e-doi").value.trim() || null,
+      tags: tags
+    };
+
+    var request = state.editingId === null
+      ? api("/papers", { method: "POST", json: Object.assign({ authors: authors }, common) })
+      : api("/papers/" + state.editingId, { method: "PATCH", json: common });
+
+    request.then(function () {
+      banner("ok", state.editingId === null ? "新建成功。" : "更新成功。");
+      closeEditor();
+      search();
+    }).catch(function (err) {
+      banner("err", "保存失败：" + err.message);
+    });
+  };
+
+  // 结果列表里的编辑 / 删除用事件委托，避免为每一行动态绑事件
+  $("results").addEventListener("click", function (e) {
+    var editBtn = e.target.closest("[data-edit]");
+    var delBtn = e.target.closest("[data-del]");
+    if (editBtn) {
+      var id = Number(editBtn.getAttribute("data-edit"));
+      api("/papers/" + id).then(function (paper) { openEditor(paper); })
+        .catch(function (err) { banner("err", "读取失败：" + err.message); });
+    }
+    if (delBtn) {
+      var delId = Number(delBtn.getAttribute("data-del"));
+      if (!confirm("确定删除论文 #" + delId + "？不可撤销。")) return;
+      api("/papers/" + delId, { method: "DELETE" })
+        .then(function () { banner("ok", "已删除 #" + delId); search(); })
+        .catch(function (err) { banner("err", "删除失败：" + err.message); });
+    }
+  });
+
+  // ---------- 导入 ----------
+  $("btn-import").onclick = function () {
+    $("import-result").innerHTML = "";
+    $("i-file").value = "";
+    $("i-text").value = "";
+    $("import-modal").classList.add("open");
+  };
+  function closeImport() { $("import-modal").classList.remove("open"); }
+  $("btn-cancel-import").onclick = closeImport;
+  $("import-modal").onclick = function (e) { if (e.target === $("import-modal")) closeImport(); };
+
+  function renderImportResult(stats) {
+    var html = '<div class="stats">' +
+      '<div class="stat"><b>' + stats.total + "</b><span>解析出</span></div>" +
+      '<div class="stat"><b style="color:var(--ok)">' + stats.created + "</b><span>新增</span></div>" +
+      '<div class="stat"><b style="color:var(--muted)">' + stats.skipped + "</b><span>已存在跳过</span></div>" +
+      '<div class="stat"><b style="color:var(--danger)">' + stats.failed + "</b><span>失败</span></div>" +
+      "</div>";
+    if (stats.issues.length) {
+      // 失败明细必须展示 —— 批量导入最难受的就是"有 N 条失败了但不知道是哪几条"
+      html += '<div class="issues">' + stats.issues.map(function (issue) {
+        return "<div>" +
+          (issue.index !== null ? "<code>#" + issue.index + "</code> " : "") +
+          (issue.key ? "<code>" + esc(issue.key) + "</code> " : "") +
+          esc(issue.reason) + "</div>";
+      }).join("") + "</div>";
+    } else {
+      html += '<p class="hint">没有失败记录。</p>';
+    }
+    $("import-result").innerHTML = html;
+  }
+
+  $("btn-do-import").onclick = function () {
+    var file = $("i-file").files[0];
+    var text = $("i-text").value.trim();
+    var request;
+
+    if (file) {
+      var form = new FormData();
+      form.append("file", file);
+      request = fetch("/papers/import/upload", {
+        method: "POST",
+        headers: { "X-API-Key": getKey() },
+        body: form
+      }).then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw new Error((data.error && data.error.message) || "HTTP " + res.status);
+          return data;
+        });
+      });
+    } else if (text) {
+      request = api("/papers/import", { method: "POST", json: { bibtex: text } });
+    } else {
+      banner("err", "请选择文件或粘贴 BibTeX 文本。");
+      return;
+    }
+
+    request.then(function (stats) {
+      renderImportResult(stats);
+      banner("ok", "导入完成：新增 " + stats.created + " 条，跳过 " + stats.skipped + " 条，失败 " + stats.failed + " 条。");
+      search();
+    }).catch(function (err) {
+      banner("err", "导入失败：" + err.message);
+    });
+  };
+
+  // ---------- 启动 ----------
+  search();
+  if (!getKey()) {
+    banner("info", "写操作（新建/编辑/删除/导入）需要 API Key。在右上角填入 .env 里的 API_KEY 并保存。");
+  }
+})();
+</script>
+</body>
+</html>

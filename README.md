@@ -10,6 +10,9 @@ FastAPI · PostgreSQL · SQLAlchemy 2.0 · Alembic · Docker Compose · GitHub A
 
 <sub>A paper-management REST API with combined search, BibTeX import, and a fully containerized, CI-gated delivery pipeline.</sub>
 
+> **想了解每项技术「为什么这么选、关键概念是什么、踩过什么坑」？**
+> 见 **[技术栈详解 · docs/TECH_STACK.md](docs/TECH_STACK.md)** —— 39 个技术条目，每条都标注了它在本项目里的具体落点。
+
 ---
 
 ## 快速开始
@@ -23,7 +26,9 @@ cp .env.example .env          # 把里面的 API_KEY 改成一串你自己的随
 docker compose up --build
 ```
 
-打开 <http://127.0.0.1:8000/docs>，点右上角 **Authorize** 填入你的 `API_KEY`，就能直接在浏览器里调所有接口。
+打开 <http://127.0.0.1:8000/> —— 会自动跳到内置的 **Web 控制台**：填上 `API_KEY` 就能检索、新建、编辑、删除、导入 BibTeX，不用写一行 curl。
+
+想看原始的接口文档则是 <http://127.0.0.1:8000/docs>（Swagger UI，点右上角 Authorize 填入 `API_KEY`）。
 
 想直接灌一批数据试试（`sample_data/sample.bib` 里故意混了一条坏数据，用来看「部分失败」的表现）：
 
@@ -37,12 +42,12 @@ curl -X POST http://127.0.0.1:8000/papers/import/upload \
 
 ## 功能
 
-- **论文 CRUD** —— 创建 / 查询 / 局部更新 / 删除，作者与标签以嵌套对象返回
-- **组合检索** —— `author`（模糊）、`year`（精确）、`tag`（精确）、`q`（标题+摘要模糊）四个条件可任意组合，按年份倒序分页
+- **论文 CRUD** —— 创建 / 查询 / 局部更新 / 删除，作者与标签以嵌套对象返回- **组合检索** —— `author`（模糊）、`year`（精确）、`tag`（精确）、`q`（标题+摘要模糊）四个条件可任意组合，按年份倒序分页
 - **BibTeX 导入** —— 支持粘贴文本和上传 `.bib` 文件；基于 DOI 幂等去重（无 DOI 时用「标题 + 年份」兜底）
 - **部分成功语义** —— 批量导入里一条坏数据不影响其余记录，失败明细逐条返回，不变式 `total == created + skipped + failed`
 - **API Key 鉴权** —— 读公开、写需鉴权，`/docs` 上直接有 Authorize 按钮
 - **统一错误响应** —— 所有 4xx/5xx 都是同一个形状，前端不用写两套解析
+- **内置 Web 控制台** —— 单文件 HTML（零依赖、无构建步骤），由 API 自己托管在 `/ui`，同源所以不需要配 CORS
 
 ---
 
@@ -259,11 +264,13 @@ uv run alembic downgrade -1                       # 回滚一步
 │   ├── db/                     # DeclarativeBase（含约束命名约定）· engine / session
 │   ├── models/                 # SQLAlchemy 2.0：Mapped + mapped_column
 │   ├── schemas/                # Pydantic 边界模型
-│   └── services/imports.py     # BibTeX 导入编排
+│   ├── services/imports.py     # BibTeX 导入编排
+│   └── web/index.html          # 内置 Web 控制台（单文件，零依赖）
 ├── migrations/                 # Alembic 迁移（versions/ 下 2 个版本）
 ├── tests/                      # 9 个测试文件
 ├── scripts/seed_fake_data.py   # 灌测试数据，供 EXPLAIN 实验用
 ├── sample_data/sample.bib      # 导入功能的试用样例
+├── docs/TECH_STACK.md          # 技术栈详解（每个技术的选型理由、关键概念、踩坑）
 ├── Dockerfile                  # 多阶段构建 + 非 root
 ├── docker-compose.yml          # api + db
 └── alembic.ini
@@ -312,5 +319,6 @@ uv run uvicorn paper_manage.main:app --reload
 | `docker build` 报找不到 `README.md` | `.dockerignore` 排掉了 `*.md`，而 `pyproject.toml` 里有 `readme = "README.md"` | 加 `!README.md` 反向包含 |
 | CI 报 `unable to find version 'v10'` | `setup-uv` 从 v8 起不再发布大版本标签；**release 版本号 ≠ 可引用的 git tag** | 固定到完整版本号 `@v10.3.0` |
 | 遍历 `app.routes` 看不到子路由 | 新版 FastAPI 的 `include_router` 不再把子路由铺平进 `app.routes` | 改用 `/openapi.json` 或 `app.openapi()["paths"]` |
+| 改了代码但容器行为完全没变 | 容器里的源码是构建时 `COPY` 进去的，`docker compose up -d` **只重启容器、不重建镜像** | 改代码后用 `docker compose up -d --build`；开发期更推荐直接 `uv run uvicorn --reload` |
 
 还有一条不是 bug、但值得单独记：**PostgreSQL 的事务性 DDL**。一次跑错库的迁移撞上「表已存在」而失败，但因为 PG 支持事务性 DDL，整个迁移被完整回滚，开发库的 2 万行数据毫发无伤。这是选 PostgreSQL 而非 MySQL 的一个实际好处。
